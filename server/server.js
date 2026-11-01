@@ -13,6 +13,10 @@ const connectDB = require("./src/config/db");
 const authRoutes = require("./src/routes/authRoutes");
 const { router: adminRoutes } = require("./src/routes/adminRoutes");
 const publicRoutes = require("./src/routes/publicRoutes");
+const { getAuth } = require("firebase-admin/auth");
+const { getFirestore } = require("firebase-admin/firestore");
+const { getFirebaseAdminApp } = require("./src/services/firebaseAdminApp");
+const { createChatNotificationHandler } = require("./src/controllers/chatNotificationController");
 
 // Initialize Express
 const app = express();
@@ -288,6 +292,17 @@ const setupLimiter = rateLimit({
 
 });
 
+const chatNotificationLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: {
+        success: false,
+        message: "Too many chat notifications were requested. Please try again later."
+    }
+});
+
 // ==========================================
 // API ROUTES
 // ==========================================
@@ -317,6 +332,16 @@ app.use(
 );
 
 // Public routes
+app.post(
+    "/api/public/chat-notification",
+    requireTrustedOrigin,
+    chatNotificationLimiter,
+    createChatNotificationHandler({
+        verifyIdToken: token => getAuth(getFirebaseAdminApp()).verifyIdToken(token),
+        getFirestore: () => getFirestore(getFirebaseAdminApp())
+    })
+);
+
 app.use(
     "/api/public",
     publicRoutes

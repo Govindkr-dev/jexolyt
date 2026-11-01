@@ -7,6 +7,7 @@ const User = require("../models/user");
 const { protect } = require("../middleware/authMiddleware");
 const { MODULES, hasPermission, cleanPermissions, validateRecordInput } = require("../utils/adminPermissions");
 const { migrate: migrateFirestoreToMongo } = require("../../scripts/migrateFirestoreToMongo");
+const { createAdminChatToken } = require("../controllers/adminChatController");
 
 const router = express.Router();
 let firestoreMigrationInProgress = false;
@@ -21,7 +22,8 @@ const ADMIN_DEFAULT_PERMISSIONS = {
     clients: { view: true, create: true, edit: true, delete: false },
     finance: { view: true, create: true, edit: true, delete: false },
     settings: { view: true, create: true, edit: true, delete: false },
-    reports: { view: true, create: true, edit: true, delete: false }
+    reports: { view: true, create: true, edit: true, delete: false },
+    support: { view: true, create: true, edit: true, delete: false }
 };
 
 function requirePermission(module, action) {
@@ -110,6 +112,8 @@ function cleanRecordBody(body, module) {
 }
 
 router.use(protect);
+
+router.post("/chat/firebase-token", createAdminChatToken);
 
 router.post("/migration/firestore", async (req, res, next) => {
     const validationError = validateFirestoreMigrationRequest(req.user, req.body);
