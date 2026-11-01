@@ -298,7 +298,7 @@ app.use(
     authLimiter
 );
 
-app.use(
+app.post(
     "/api/auth/setup",
     setupLimiter
 );
