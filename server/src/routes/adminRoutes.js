@@ -6,8 +6,10 @@ const AuditLog = require("../models/auditLog");
 const User = require("../models/user");
 const { protect } = require("../middleware/authMiddleware");
 const { MODULES, hasPermission, cleanPermissions, validateRecordInput } = require("../utils/adminPermissions");
+const { migrate: migrateFirestoreToMongo } = require("../../scripts/migrateFirestoreToMongo");
 
 const router = express.Router();
+let firestoreMigrationInProgress = false;
 const recordModules = MODULES.filter(module => ![
     "dashboard", "users", "activity-logs", "search", "data"
 ].includes(module));
@@ -29,6 +31,26 @@ function requirePermission(module, action) {
         }
         return next();
     };
+}
+
+function validateFirestoreMigrationRequest(user, body) {
+    if (user?.role !== "super_admin") {
+        return { status: 403, message: "Only the Super Admin can migrate Firestore data." };
+    }
+
+    if (!["dry-run", "copy"].includes(body?.mode)) {
+        return { status: 400, message: "Choose dry-run or copy." };
+    }
+    if (
+        body.mode === "copy" &&
+        (body.confirm !== "COPY_FIRESTORE_TO_MONGODB" || body.writesPaused !== true)
+    ) {
+        return {
+            status: 400,
+            message: "Copy requires explicit confirmation and a Firestore write pause."
+        };
+    }
+    return null;
 }
 
 function escapeRegex(value) {
@@ -88,6 +110,37 @@ function cleanRecordBody(body, module) {
 }
 
 router.use(protect);
+
+router.post("/migration/firestore", async (req, res, next) => {
+    const validationError = validateFirestoreMigrationRequest(req.user, req.body);
+    if (validationError) {
+        return res.status(validationError.status).json({ success: false, message: validationError.message });
+    }
+    const mode = req.body.mode;
+    if (firestoreMigrationInProgress) {
+        return res.status(409).json({ success: false, message: "A Firestore migration is already running." });
+    }
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        return res.status(503).json({ success: false, message: "Firebase server credentials are not configured." });
+    }
+
+    firestoreMigrationInProgress = true;
+    try {
+        const result = await migrateFirestoreToMongo({ apply: mode === "copy" });
+        await writeAudit(
+            req,
+            mode === "copy" ? "firestore.migration.copied" : "firestore.migration.dry-run",
+            "data",
+            null,
+            `${mode === "copy" ? "Copied" : "Counted"} ${result.total} Firestore documents.`
+        );
+        return res.status(200).json({ success: true, mode, ...result });
+    } catch (error) {
+        return next(error);
+    } finally {
+        firestoreMigrationInProgress = false;
+    }
+});
 
 router.get("/dashboard", requirePermission("dashboard", "view"), async (req, res, next) => {
     try {
@@ -420,4 +473,10 @@ router.get("/notifications/unread-count", async (req, res, next) => {
     }
 });
 
-module.exports = { router, recordModules, ADMIN_DEFAULT_PERMISSIONS, requirePermission };
+module.exports = {
+    router,
+    recordModules,
+    ADMIN_DEFAULT_PERMISSIONS,
+    requirePermission,
+    validateFirestoreMigrationRequest
+};

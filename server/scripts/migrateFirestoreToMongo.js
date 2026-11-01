@@ -187,5 +187,6 @@ module.exports = {
     ROOT_COLLECTIONS,
     serializeFirestoreValue,
     makeDocumentOperation,
-    copyCollection
+    copyCollection,
+    migrate
 };

@@ -26,6 +26,8 @@ Configure `MONGODB_URI`, `FIREBASE_PROJECT_ID=govindkr-dev`, and either `FIREBAS
 2. Before copying, coordinate a write freeze or a final synchronization window for Firestore writes. Run `npm run migrate:firestore -- --apply` to copy, then compare the verified MongoDB counts with Firestore.
 3. Keep the Firebase site and legacy admin available until every reader and writer has been migrated and verified. This copy alone does not cut over live website traffic; do not treat it as a completed migration.
 
+On Render Free, where Shell and One-Off Jobs are unavailable, a signed-in Super Admin can use `POST /api/admin/migration/firestore` with `{"mode":"dry-run"}` to obtain read-only counts. The same endpoint accepts `{"mode":"copy","confirm":"COPY_FIRESTORE_TO_MONGODB","writesPaused":true}` only after Firestore writes have been paused. Both modes use the server-side service-account credentials, and every run is recorded in the admin audit log.
+
 For production, deploy this Node service behind HTTPS with `HOST=0.0.0.0`, set `CLIENT_URL` to the exact frontend origin, and set the `jexolyt-api-url` meta tag on admin, setup, and homepage pages to the HTTPS API origin (currently `https://jexolyt.onrender.com`). Use a same-origin HTTPS deployment where possible so the protected admin session cookie works consistently. Firebase Hosting does not proxy `/api` to this service; the frontend calls the configured API origin directly.
 
 ## Safeguards and scope
