@@ -1,6 +1,6 @@
 # JEXOLYT Admin API
 
-The Node.js application serves the website and the MongoDB-backed admin API from one origin. Admin sessions use an HttpOnly, Secure, partitioned cookie in production so the Firebase-hosted frontend can keep its Render API session across page reloads. The login form can remember a device for up to 30 days; otherwise sessions expire after 8 hours. Admin access and every module action are checked by the API; hiding a navigation item is not treated as authorization.
+The Node.js application serves the website and the MongoDB-backed admin API from one origin. Admin sessions use a 15-minute access token and a rotating, hashed refresh token in HttpOnly cookies; production cookies are Secure and partitioned so the Firebase-hosted frontend can keep its Render API session across page reloads. Refresh sessions have a fixed maximum lifetime of 30 days when “remember me” is selected, or 8 hours otherwise. Logout revokes the active refresh session, and the API checks the backing session for each protected request. Admin access and every module action are checked by the API; hiding a navigation item is not treated as authorization.
 
 ## Local setup
 
@@ -14,7 +14,17 @@ The first Super Admin can create Admin accounts and configure their per-module p
 
 ## Current integration boundary
 
-When served by this Node application, homepage hero content and project enquiry submissions use the MongoDB API. The old Firebase admin page remains available at `../pages/firebase-admin.html` for existing member, portfolio, freelancer application, and category workflows. The former `../pages/dashboard.html` URL now opens the new MongoDB admin panel. Existing Firebase records are not automatically copied into MongoDB; plan and verify a deliberate migration before retiring the legacy Firebase admin page.
+When served by this Node application, homepage hero content and project enquiry submissions use the MongoDB API. The old Firebase admin page remains available at `../pages/firebase-admin.html` for existing member, portfolio, freelancer application, and category workflows. The former `../pages/dashboard.html` URL now opens the new MongoDB admin panel. Existing Firebase records are copied only by the explicit migration script below; the live website is not switched automatically.
+
+### Firestore data copy (staging step)
+
+The migration script copies documents from `adminActivity`, `applications`, `attendance`, `categories`, `chats`, `contacts`, `members`, `notifications`, `publicProfiles`, `team`, `users`, and `worklogs`, including nested collections such as member projects and chat messages. It preserves each Firestore document path and IDs in MongoDB's `firebase_documents` collection and serializes Firestore timestamps, references, geopoints, and bytes without changing the source. It is resumable and updates MongoDB records by source path; it never deletes Firestore or MongoDB documents.
+
+Configure `MONGODB_URI` and either `FIREBASE_SERVICE_ACCOUNT_JSON` (the service-account JSON stored as a private server environment variable) or Google Application Default Credentials via `GOOGLE_APPLICATION_CREDENTIALS`. Set `FIREBASE_PROJECT_ID` to the source project if it differs from `govindkr-dev`. Never put service-account credentials in website files, git, or chat.
+
+1. Run `npm run migrate:firestore -- --dry-run` to list source counts.
+2. Before copying, coordinate a write freeze or a final synchronization window for Firestore writes. Run `npm run migrate:firestore -- --apply` to copy, then compare the verified MongoDB counts with Firestore.
+3. Keep the Firebase site and legacy admin available until every reader and writer has been migrated and verified. This copy alone does not cut over live website traffic; do not treat it as a completed migration.
 
 For production, deploy this Node service behind HTTPS with `HOST=0.0.0.0`, set `CLIENT_URL` to the exact frontend origin, and set the `jexolyt-api-url` meta tag on admin, setup, and homepage pages to the HTTPS API origin (currently `https://jexolyt.onrender.com`). Use a same-origin HTTPS deployment where possible so the protected admin session cookie works consistently. Firebase Hosting does not proxy `/api` to this service; the frontend calls the configured API origin directly.
 
