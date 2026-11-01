@@ -20,7 +20,7 @@ When served by this Node application, homepage hero content and project enquiry 
 
 The migration script copies documents from `adminActivity`, `applications`, `attendance`, `categories`, `chats`, `contacts`, `members`, `notifications`, `publicProfiles`, `team`, `users`, and `worklogs`, including nested collections such as member projects and chat messages. It preserves each Firestore document path and IDs in MongoDB's `firebase_documents` collection and serializes Firestore timestamps, references, geopoints, and bytes without changing the source. It is resumable and updates MongoDB records by source path; it never deletes Firestore or MongoDB documents.
 
-Configure `MONGODB_URI` and either `FIREBASE_SERVICE_ACCOUNT_JSON` (the service-account JSON stored as a private server environment variable) or Google Application Default Credentials via `GOOGLE_APPLICATION_CREDENTIALS`. Set `FIREBASE_PROJECT_ID` to the source project if it differs from `govindkr-dev`. Never put service-account credentials in website files, git, or chat.
+Configure `MONGODB_URI`, `FIREBASE_PROJECT_ID=govindkr-dev`, and either `FIREBASE_SERVICE_ACCOUNT_JSON` (the service-account JSON stored as a private server environment variable) or Google Application Default Credentials via `GOOGLE_APPLICATION_CREDENTIALS`. The importer checks that it targets `govindkr-dev`, which is the Firebase project configured by the JEXOLYT website. Never put service-account credentials in website files, git, or chat.
 
 1. Run `npm run migrate:firestore -- --dry-run` to list source counts.
 2. Before copying, coordinate a write freeze or a final synchronization window for Firestore writes. Run `npm run migrate:firestore -- --apply` to copy, then compare the verified MongoDB counts with Firestore.
