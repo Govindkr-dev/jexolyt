@@ -91,7 +91,7 @@ router.use(protect);
 
 router.get("/dashboard", requirePermission("dashboard", "view"), async (req, res, next) => {
     try {
-        const [users, counts, recentActivity, recentProjects, revenue] = await Promise.all([
+        const [users, counts, recentActivity, recentProjects, revenue, activityTrend, auditLogs] = await Promise.all([
             hasPermission(req.user, "users", "view") ? User.countDocuments() : 0,
             AdminRecord.aggregate([
                 { $match: { deletedAt: null } },
@@ -108,7 +108,15 @@ router.get("/dashboard", requirePermission("dashboard", "view"), async (req, res
                     { $match: { module: "finance", "data.transactionType": "income", status: { $in: ["paid", "received"] }, deletedAt: null } },
                     { $group: { _id: null, total: { $sum: { $convert: { input: "$data.amount", to: "double", onError: 0, onNull: 0 } } } } }
                 ])
-                : []
+                : [],
+            hasPermission(req.user, "activity-logs", "view")
+                ? AuditLog.aggregate([
+                    { $match: { createdAt: { $gte: new Date(Date.now() - 13 * 24 * 60 * 60 * 1000) } } },
+                    { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "UTC" } }, count: { $sum: 1 } } },
+                    { $sort: { _id: 1 } }
+                ])
+                : [],
+            hasPermission(req.user, "activity-logs", "view") ? AuditLog.countDocuments() : 0
         ]);
         const moduleCounts = Object.fromEntries(
             counts
@@ -126,11 +134,13 @@ router.get("/dashboard", requirePermission("dashboard", "view"), async (req, res
                 projects: moduleCounts.projects || 0,
                 clients: moduleCounts.clients || 0,
                 openSupport,
-                recordedRevenue: revenue[0]?.total || 0
+                recordedRevenue: revenue[0]?.total || 0,
+                auditLogs
             },
             modules: moduleCounts,
             recentActivity,
-            recentProjects: recentProjects.map(toPublicRecord)
+            recentProjects: recentProjects.map(toPublicRecord),
+            activityTrend: activityTrend.map(item => ({ date: item._id, count: item.count }))
         });
     } catch (error) {
         return next(error);

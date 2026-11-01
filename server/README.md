@@ -1,6 +1,6 @@
 # JEXOLYT Admin API
 
-The Node.js application serves the website and the MongoDB-backed admin API from one origin. Admin sessions use an HttpOnly, SameSite=Strict cookie. Admin access and every module action are checked by the API; hiding a navigation item is not treated as authorization.
+The Node.js application serves the website and the MongoDB-backed admin API from one origin. Admin sessions use an HttpOnly, Secure, partitioned cookie in production so the Firebase-hosted frontend can keep its Render API session across page reloads. The login form can remember a device for up to 30 days; otherwise sessions expire after 8 hours. Admin access and every module action are checked by the API; hiding a navigation item is not treated as authorization.
 
 ## Local setup
 
@@ -16,7 +16,7 @@ The first Super Admin can create Admin accounts and configure their per-module p
 
 When served by this Node application, homepage hero content and project enquiry submissions use the MongoDB API. The old Firebase admin page remains available at `../pages/firebase-admin.html` for existing member, portfolio, freelancer application, and category workflows. The former `../pages/dashboard.html` URL now opens the new MongoDB admin panel. Existing Firebase records are not automatically copied into MongoDB; plan and verify a deliberate migration before retiring the legacy Firebase admin page.
 
-For production, deploy this Node service behind HTTPS with `HOST=0.0.0.0`, set `CLIENT_URL` to the exact frontend origin, and set the `jexolyt-api-url` meta tag on the frontend to the HTTPS API origin. Use a same-origin HTTPS deployment where possible so the protected admin session cookie works consistently. Firebase Hosting does not proxy `/api` to this service; do not link the production panel until an API origin or hosting proxy is configured.
+For production, deploy this Node service behind HTTPS with `HOST=0.0.0.0`, set `CLIENT_URL` to the exact frontend origin, and set the `jexolyt-api-url` meta tag on admin, setup, and homepage pages to the HTTPS API origin (currently `https://jexolyt.onrender.com`). Use a same-origin HTTPS deployment where possible so the protected admin session cookie works consistently. Firebase Hosting does not proxy `/api` to this service; the frontend calls the configured API origin directly.
 
 ## Safeguards and scope
 
