@@ -35,7 +35,9 @@ function getFirebaseAdminApp() {
     if (existingApp) return existingApp;
 
     let credential;
-    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        credential = applicationDefault();
+    } else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
         credential = cert(parseServiceAccountJson(process.env.FIREBASE_SERVICE_ACCOUNT_JSON));
     } else {
         credential = applicationDefault();
