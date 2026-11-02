@@ -96,6 +96,11 @@ function createFirebaseAdminOverviewHandler(getFirestore) {
             res.set("Cache-Control", "no-store");
             return res.status(200).json({ success: true, summary });
         } catch (error) {
+            console.error("Firebase workforce overview failed:", {
+                code: error.code,
+                name: error.name,
+                message: error.message
+            });
             return next(error);
         }
     };
