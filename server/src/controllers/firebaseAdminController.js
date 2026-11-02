@@ -606,10 +606,6 @@ function createFirebaseAdminHandlers(getFirestore, writeAudit, emailOptions) {
             res.status(403).json({ success: false, message: "Only the Super Admin can manage Firebase workforce records." });
             return false;
         }
-        if (process.env.FIREBASE_PROJECT_ID !== "govindkr-dev") {
-            res.status(503).json({ success: false, message: "Firebase Admin is not configured for the JEXOLYT project." });
-            return false;
-        }
         return true;
     }
     return {

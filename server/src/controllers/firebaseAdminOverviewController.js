@@ -91,13 +91,6 @@ function createFirebaseAdminOverviewHandler(getFirestore) {
             });
         }
 
-        if (process.env.FIREBASE_PROJECT_ID !== "govindkr-dev") {
-            return res.status(503).json({
-                success: false,
-                message: "Firebase Admin is not configured for the JEXOLYT project."
-            });
-        }
-
         try {
             const summary = await loadFirebaseAdminOverview(getFirestore());
             res.set("Cache-Control", "no-store");
