@@ -1,12 +1,13 @@
 const express = require("express");
 const router = express.Router();
 
-const { login, logout, publicUser } = require("../controllers/authController");
+const { login, logout, refresh, publicUser } = require("../controllers/authController");
 const { protect, optionalUser } = require("../middleware/authMiddleware");
 const { createSuperAdmin } = require("../controllers/setupController");
 const User = require("../models/user");
 
 router.post("/login", login);
+router.post("/refresh", refresh);
 router.post("/setup", createSuperAdmin);
 router.post("/logout", optionalUser, logout);
 router.get("/setup/status", async (req, res, next) => {

@@ -1,6 +1,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { validateFirestoreMigrationRequest } = require("../src/routes/adminRoutes");
+const { validateFirestoreMigrationRequest, getIndiaMonthBounds } = require("../src/routes/adminRoutes");
+
+test("monthly admin metrics use India calendar-month boundaries", () => {
+    const { start, end } = getIndiaMonthBounds(new Date("2025-02-14T12:00:00.000Z"));
+    assert.equal(start.toISOString(), "2025-01-31T18:30:00.000Z");
+    assert.equal(end.toISOString(), "2025-02-28T18:30:00.000Z");
+});
 
 test("Firestore migration is restricted to the Super Admin", () => {
     const error = validateFirestoreMigrationRequest(

@@ -1,19 +1,46 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/user");
+const AdminSession = require("../models/adminSession");
 const { SESSION_COOKIE } = require("../controllers/authController");
 
+// Extract token from Authorization header or cookie
 function getToken(req) {
-    if (req.headers.authorization?.startsWith("Bearer ")) {
-        return req.headers.authorization.split(" ")[1];
+    const authorization = req.headers.authorization;
+
+    if (authorization?.startsWith("Bearer ")) {
+        return authorization.slice(7).trim();
     }
-    return req.cookies?.[SESSION_COOKIE];
+
+    return req.cookies?.[SESSION_COOKIE] || null;
 }
 
+// Identify JWT errors
 function isInvalidToken(error) {
-    return error.name === "JsonWebTokenError" || error.name === "TokenExpiredError";
+    return (
+        error.name === "JsonWebTokenError" ||
+        error.name === "TokenExpiredError" ||
+        error.name === "NotBeforeError"
+    );
 }
 
-// VERIFY AUTHENTICATION
+// Verify JWT
+function verifyToken(token) {
+    if (!token || !process.env.JWT_SECRET) {
+        throw new Error("Authentication configuration error.");
+    }
+
+    return jwt.verify(
+        token,
+        process.env.JWT_SECRET,
+        {
+            issuer: "jexolyt-admin",
+            audience: "jexolyt-admin-panel",
+            algorithms: ["HS256"]
+        }
+    );
+}
+
+// Mandatory Authentication
 const protect = async (req, res, next) => {
     try {
         const token = getToken(req);
@@ -25,24 +52,32 @@ const protect = async (req, res, next) => {
             });
         }
 
-        // Verify JWT
-        const decoded = jwt.verify(
-            token,
-            process.env.JWT_SECRET,
-            { issuer: "jexolyt-admin", audience: "jexolyt-admin-panel", algorithms: ["HS256"] }
-        );
+        const decoded = verifyToken(token);
 
-        // Find user
-        const user = await User.findById(decoded.id);
-
-        if (!user) {
+        if (!decoded.id || typeof decoded.sid !== "string") {
             return res.status(401).json({
                 success: false,
-                message: "User no longer exists."
+                message: "Invalid authentication token."
             });
         }
 
-        // Check account status
+        const [session, user] = await Promise.all([
+            AdminSession.findOne({
+                _id: decoded.sid,
+                userId: decoded.id,
+                revokedAt: null,
+                expiresAt: { $gt: new Date() }
+            }),
+            User.findById(decoded.id)
+        ]);
+
+        if (!session || !user) {
+            return res.status(401).json({
+                success: false,
+                message: "Your session is no longer valid. Please sign in again."
+            });
+        }
+
         if (user.status !== "active") {
             return res.status(403).json({
                 success: false,
@@ -50,12 +85,12 @@ const protect = async (req, res, next) => {
             });
         }
 
-        // Attach user to request
         req.user = user;
 
-        next();
+        return next();
 
     } catch (error) {
+
         if (isInvalidToken(error)) {
             return res.status(401).json({
                 success: false,
@@ -72,22 +107,47 @@ const protect = async (req, res, next) => {
     }
 };
 
+// Optional Authentication
 const optionalUser = async (req, res, next) => {
-    const token = getToken(req);
-    if (!token) return next();
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET, {
-            issuer: "jexolyt-admin",
-            audience: "jexolyt-admin-panel",
-            algorithms: ["HS256"]
-        });
-        req.user = await User.findById(decoded.id);
+        const token = getToken(req);
+
+        if (!token) {
+            return next();
+        }
+
+        const decoded = verifyToken(token);
+
+        if (!decoded.id) {
+            return next();
+        }
+
+        const user = await User.findById(decoded.id);
+
+        if (!user || user.status !== "active") {
+            return next();
+        }
+
+        req.user = user;
+
         return next();
+
     } catch (error) {
-        if (isInvalidToken(error)) return next();
-        console.error("Could not read admin session:", error.name);
-        return res.status(500).json({ success: false, message: "The session could not be closed." });
+
+        if (isInvalidToken(error)) {
+            return next();
+        }
+
+        console.error("Optional authentication failed:", error.name);
+
+        return res.status(500).json({
+            success: false,
+            message: "Authentication service temporarily unavailable."
+        });
     }
 };
 
-module.exports = { protect, optionalUser };
+module.exports = {
+    protect,
+    optionalUser
+};

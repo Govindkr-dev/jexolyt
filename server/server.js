@@ -17,6 +17,7 @@ const { getAuth } = require("firebase-admin/auth");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getFirebaseAdminApp } = require("./src/services/firebaseAdminApp");
 const { createChatNotificationHandler } = require("./src/controllers/chatNotificationController");
+const { createProjectEstimateHandler } = require("./src/controllers/projectEstimateController");
 
 // Initialize Express
 const app = express();
@@ -303,6 +304,17 @@ const chatNotificationLimiter = rateLimit({
     }
 });
 
+const projectEstimateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 5,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: {
+        success: false,
+        message: "Too many estimate requests. Please try again later."
+    }
+});
+
 // ==========================================
 // API ROUTES
 // ==========================================
@@ -340,6 +352,13 @@ app.post(
         verifyIdToken: token => getAuth(getFirebaseAdminApp()).verifyIdToken(token),
         getFirestore: () => getFirestore(getFirebaseAdminApp())
     })
+);
+
+app.post(
+    "/api/public/project-estimate",
+    requireTrustedOrigin,
+    projectEstimateLimiter,
+    createProjectEstimateHandler()
 );
 
 app.use(

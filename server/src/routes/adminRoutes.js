@@ -8,6 +8,10 @@ const { protect } = require("../middleware/authMiddleware");
 const { MODULES, hasPermission, cleanPermissions, validateRecordInput } = require("../utils/adminPermissions");
 const { migrate: migrateFirestoreToMongo } = require("../../scripts/migrateFirestoreToMongo");
 const { createAdminChatToken } = require("../controllers/adminChatController");
+const { createFirebaseAdminOverviewHandler } = require("../controllers/firebaseAdminOverviewController");
+const { createFirebaseAdminHandlers } = require("../controllers/firebaseAdminController");
+const { getFirestore } = require("firebase-admin/firestore");
+const { getFirebaseAdminApp } = require("../services/firebaseAdminApp");
 
 const router = express.Router();
 let firestoreMigrationInProgress = false;
@@ -57,6 +61,20 @@ function validateFirestoreMigrationRequest(user, body) {
 
 function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getIndiaMonthBounds(now = new Date()) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit"
+    }).formatToParts(now);
+    const values = Object.fromEntries(parts.map(part => [part.type, Number(part.value)]));
+    const indiaOffsetMs = 330 * 60 * 1000;
+    return {
+        start: new Date(Date.UTC(values.year, values.month - 1, 1) - indiaOffsetMs),
+        end: new Date(Date.UTC(values.year, values.month, 1) - indiaOffsetMs)
+    };
 }
 
 function toPublicRecord(record) {
@@ -114,6 +132,16 @@ function cleanRecordBody(body, module) {
 router.use(protect);
 
 router.post("/chat/firebase-token", createAdminChatToken);
+const firebaseHandlers = createFirebaseAdminHandlers(
+    () => getFirestore(getFirebaseAdminApp()),
+    writeAudit
+);
+router.get("/firebase/overview", createFirebaseAdminOverviewHandler(
+    () => getFirestore(getFirebaseAdminApp())
+));
+router.get("/firebase/:module", firebaseHandlers.list);
+router.post("/firebase/:module", firebaseHandlers.create);
+router.patch("/firebase/:module/:id", firebaseHandlers.update);
 
 router.post("/migration/firestore", async (req, res, next) => {
     const validationError = validateFirestoreMigrationRequest(req.user, req.body);
@@ -148,6 +176,7 @@ router.post("/migration/firestore", async (req, res, next) => {
 
 router.get("/dashboard", requirePermission("dashboard", "view"), async (req, res, next) => {
     try {
+        const { start: monthStart, end: nextMonthStart } = getIndiaMonthBounds();
         const [users, counts, recentActivity, recentProjects, revenue, activityTrend, auditLogs] = await Promise.all([
             hasPermission(req.user, "users", "view") ? User.countDocuments() : 0,
             AdminRecord.aggregate([
@@ -175,6 +204,20 @@ router.get("/dashboard", requirePermission("dashboard", "view"), async (req, res
                 : [],
             hasPermission(req.user, "activity-logs", "view") ? AuditLog.countDocuments() : 0
         ]);
+        const [monthlyRevenue, monthlyExpenses] = await Promise.all([
+            hasPermission(req.user, "finance", "view")
+                ? AdminRecord.aggregate([
+                    { $match: { module: "finance", "data.transactionType": "income", status: { $in: ["paid", "received"] }, createdAt: { $gte: monthStart, $lt: nextMonthStart }, deletedAt: null } },
+                    { $group: { _id: null, total: { $sum: { $convert: { input: "$data.amount", to: "double", onError: 0, onNull: 0 } } } } }
+                ])
+                : [],
+            hasPermission(req.user, "finance", "view")
+                ? AdminRecord.aggregate([
+                    { $match: { module: "finance", "data.transactionType": "expense", status: { $in: ["paid", "received"] }, createdAt: { $gte: monthStart, $lt: nextMonthStart }, deletedAt: null } },
+                    { $group: { _id: null, total: { $sum: { $convert: { input: "$data.amount", to: "double", onError: 0, onNull: 0 } } } } }
+                ])
+                : []
+        ]);
         const moduleCounts = Object.fromEntries(
             counts
                 .filter(item => hasPermission(req.user, item._id, "view"))
@@ -192,6 +235,8 @@ router.get("/dashboard", requirePermission("dashboard", "view"), async (req, res
                 clients: moduleCounts.clients || 0,
                 openSupport,
                 recordedRevenue: revenue[0]?.total || 0,
+                monthlyRevenue: monthlyRevenue[0]?.total || 0,
+                monthlyExpenses: monthlyExpenses[0]?.total || 0,
                 auditLogs
             },
             modules: moduleCounts,
@@ -482,5 +527,6 @@ module.exports = {
     recordModules,
     ADMIN_DEFAULT_PERMISSIONS,
     requirePermission,
-    validateFirestoreMigrationRequest
+    validateFirestoreMigrationRequest,
+    getIndiaMonthBounds
 };
