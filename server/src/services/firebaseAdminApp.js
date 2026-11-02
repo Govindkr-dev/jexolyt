@@ -11,6 +11,23 @@ function getFirebaseProjectId(projectId = process.env.FIREBASE_PROJECT_ID) {
     return PROJECT_ID;
 }
 
+function parseServiceAccountJson(value) {
+    let serviceAccount;
+    try {
+        serviceAccount = JSON.parse(value);
+    } catch {
+        throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON must contain valid service-account JSON.");
+    }
+
+    if (typeof serviceAccount.private_key === "string") {
+        serviceAccount.private_key = serviceAccount.private_key
+            .replace(/\r\n/g, "\n")
+            .replace(/(?:\\r)?\\n/g, "\n")
+            .trim();
+    }
+    return serviceAccount;
+}
+
 function getFirebaseAdminApp() {
     const projectId = getFirebaseProjectId();
 
@@ -19,13 +36,7 @@ function getFirebaseAdminApp() {
 
     let credential;
     if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-        let serviceAccount;
-        try {
-            serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-        } catch {
-            throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON must contain valid service-account JSON.");
-        }
-        credential = cert(serviceAccount);
+        credential = cert(parseServiceAccountJson(process.env.FIREBASE_SERVICE_ACCOUNT_JSON));
     } else {
         credential = applicationDefault();
     }
@@ -36,4 +47,4 @@ function getFirebaseAdminApp() {
     }, APP_NAME);
 }
 
-module.exports = { getFirebaseAdminApp, getFirebaseProjectId };
+module.exports = { getFirebaseAdminApp, getFirebaseProjectId, parseServiceAccountJson };
